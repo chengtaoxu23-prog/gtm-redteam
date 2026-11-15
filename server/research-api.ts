@@ -9,6 +9,7 @@ import { checkClaims, applyReviews, semanticInput } from "./gtm-execution.js";
 import { parseSemanticReviews } from "./gtm-schema.js";
 import { SchemaError } from "./validation.js";
 import type { Contract, Hypothesis, Proposal } from "../src/shared/research.js";
+import { validationFields } from "./contract-validation.js";
 import fixture from "../examples/temu-case-001/registry.json";
 const fail = (message: string): never => {
   throw new SchemaError(message);
@@ -36,10 +37,15 @@ function contract(v: unknown, revision: number): Contract {
     "market",
     "customerSegment",
     "validationWindow",
-    "decisionThreshold",
+    "decisionThreshold", "validation_criteria_complete", "missing_validation_fields", "success_criteria", "failure_criteria", "validation_window",
   ]);
   if (!text(p.statement).trim()) fail("Statement 不能为空");
-  return {
+  if (p.validation_criteria_complete !== undefined && typeof p.validation_criteria_complete !== "boolean") fail("验证确认必须是布尔值");
+  const result: Contract = {
+    validation_criteria_complete: p.validation_criteria_complete === true,
+    success_criteria: text(p.success_criteria ?? p.supporting ?? ""),
+    failure_criteria: text(p.failure_criteria ?? p.falsification ?? ""),
+    validation_window: text(p.validation_window ?? p.validationWindow ?? ""),
     revision,
     statement: p.statement,
     scope: text(p.scope ?? ""),
@@ -60,6 +66,7 @@ function contract(v: unknown, revision: number): Contract {
       ? { decisionThreshold: text(p.decisionThreshold, 2000) }
       : {}),
   };
+  return { ...result, ...validationFields(result) };
 }
 export function parseCSV(raw: string): string[][] {
   const rows: string[][] = [];

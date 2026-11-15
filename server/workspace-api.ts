@@ -12,6 +12,7 @@ import {
 } from "./research-materials.js";
 import { researchReport } from "./workspace-report.js";
 import { workspaceDeltas } from "./workspace-deltas.js";
+import { hypothesisCoverage } from "./workspace-coverage.js";
 import { SchemaError } from "./validation.js";
 const text = (v: unknown, max = 12000) => {
   if (typeof v !== "string" || !v.trim() || v.length > max)
@@ -61,6 +62,9 @@ export function mountWorkspaceApi(
       r.json({
         state,
         ledger,
+        chunkCoverage: ledger.hypotheses.flatMap(h => hypothesisCoverage(h,
+          state.materials.filter(m => state.projects.find(p => p.id === h.projectId)?.materialKeys.includes(materialKey(m))), state.runs,
+          state.runs.filter(r => r.projectId === h.projectId && r.kind !== "plan").at(-1)?.id)),
         provider: runtime ? { mode: runtime.mode, model: runtime.model } : null,
         search: searchCapability,
       });

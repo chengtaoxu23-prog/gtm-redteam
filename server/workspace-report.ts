@@ -5,6 +5,7 @@ import type {
 } from "../src/shared/workspace.js";
 import type { ResearchState } from "../src/shared/research.js";
 import { materialKey } from "./research-materials.js";
+import { hypothesisCoverage } from "./workspace-coverage.js";
 import { workspaceDeltas } from "./workspace-deltas.js";
 const esc = (s: unknown) =>
   String(s ?? "unknown")
@@ -57,16 +58,16 @@ export function researchReport(
     "",
     "## Evidence scope and limits",
     "",
-    `${run.coverage.selectedUnits} / ${run.coverage.availableUnits} source units assessed; ${run.coverage.omittedUnits} units not assessed. ${esc(run.coverage.strategy)}`,
+    `${run.coverage.selectedUnits} / ${run.coverage.availableUnits} source units selected for retrieval; ${run.coverage.omittedUnits} units not assessed. ${esc(run.coverage.strategy)}`,
     "",
     "Publication dates marked unknown remain unknown. Acquisition time does not establish freshness. Vendor claims are attributed to their publisher. No measured customer demand, CAC or LTV is inferred from public pricing pages.",
     "",
     `Requests: ${run.calls.length} / ${run.maxCalls}. Provider-returned known tokens: ${run.calls.reduce((n, c) => n + (c.usage.totalTokens ?? 0), 0)}. Calls with missing usage: ${run.calls.filter((c) => c.usage.totalTokens === null).length}. Estimated input tokens are separate from actual usage.`,
     "",
-    "## Hypothesis contracts and human status",
+    "## Historical Research Context",
     "",
   ];
-  for (const h of hypotheses) {
+  for (const h of run.hypotheses) {
     const c = h.contracts.at(-1)!;
     lines.push(
       `### ${esc(h.id)} · r${c.revision} · ${esc(h.status)}`,
@@ -82,7 +83,12 @@ export function researchReport(
       "",
     );
   }
-  lines.push("## Verified claim ledger", "");
+  lines.push("## Chunk coverage at this run", "");
+  for (const h of run.hypotheses) for (const c of hypothesisCoverage(h, materials.filter(m => run.sourceKeys.includes(materialKey(m))), history.filter(r => r.createdAt <= run.createdAt), run.id))
+    lines.push(`- ${h.id} r${c.hypothesis_version} · ${c.materialKey}: evaluated_chunks=${c.evaluated_chunks}; unread_chunks_remaining=${c.unread_chunks_remaining}; coverage_ratio=${c.coverage_ratio}; newly_read_chunks=${c.newly_read_chunks.join(",")}.`);
+  lines.push("not_found_in_read_chunks only describes read chunks; unread material may contain counterevidence.", "", "## Current Hypothesis State", "");
+  for (const h of hypotheses) lines.push(`- ${esc(h.id)} · current r${h.contracts.at(-1)!.revision} · human status ${h.status}`);
+  lines.push("", "Historical conclusions above use the frozen contract and source versions; current state does not reinterpret them.", "", "## Verified claim ledger", "");
   for (const evidenceRun of included) {
     lines.push(
       `### Evidence run ${evidenceRun.id} · ${evidenceRun.kind}`,

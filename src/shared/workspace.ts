@@ -114,7 +114,23 @@ export interface RoleExecution {
   output: AgentOutput | null;
   error: string | null;
 }
+export interface ChunkEvaluation {
+  hypothesis_id: string;
+  hypothesis_version: number;
+  source_id: string;
+  source_version: string;
+  chunk_id: string;
+  content_hash: string;
+  entered_model_context: true;
+  run_id: string;
+  call_id: string;
+  evaluated_at: string;
+  role: ResearchRole;
+}
 export interface WorkspaceRun {
+  budgetKey?: string;
+  chunkEvaluations?: ChunkEvaluation[];
+  roleSelections?: Partial<Record<ResearchRole, Pick<WorkspaceRun, "sources" | "selectedUnits" | "coverage">>>;
   id: string;
   projectId: string;
   kind: "plan" | "research" | "delta";
@@ -169,4 +185,5 @@ export interface WorkspaceDelta {
   timestamp: string;
   humanDecision: string;
   claimId?: string;
+  not_found_in_read_chunks?: boolean;
 }

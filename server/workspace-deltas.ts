@@ -72,8 +72,9 @@ export function workspaceDeltas(
         newEvidenceIds: [],
         previousStatus: frozen.status,
         proposedStatus: proposal?.to ?? frozen.status,
+        not_found_in_read_chunks: true,
         reason:
-          "No verified claim from this run directly addresses this contract. New material does not establish support or contradiction. Any needs_research recommendation reflects unresolved validation gaps, not positive evidence.",
+          "not_found_in_read_chunks: unread chunks may still contain evidence. No verified claim from this run directly addresses this contract. New material does not establish support or contradiction. Any needs_research recommendation reflects unresolved validation gaps, not positive evidence.",
         timestamp: run.updatedAt,
         humanDecision: proposal?.decision ?? "not_applicable",
       });

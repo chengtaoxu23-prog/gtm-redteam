@@ -29,6 +29,7 @@ async function api<T = any>(url: string, body?: unknown): Promise<T> {
 type View = {
   state: WorkspaceState;
   ledger: ResearchState;
+  chunkCoverage?: { hypothesis_id: string; hypothesis_version: number; materialKey: string; total_chunks: number; evaluated_chunks: number; unread_chunks_remaining: number; coverage_ratio: number; newly_read_chunks: string[]; unread_chunk_ids: string[] }[];
   provider: { mode: string; model: string } | null;
   search: { configured: boolean; reason: string };
 };
@@ -89,7 +90,8 @@ function ContractEditor({
 }) {
   const c = h.contracts.at(-1)!;
   const [draft, setDraft] = useState(emptyContract),
-    [editing, setEditing] = useState(false);
+    [editing, setEditing] = useState(false),
+    [confirmed, setConfirmed] = useState(false);
   useEffect(() => {
     setDraft(
       Object.fromEntries(
@@ -100,6 +102,7 @@ function ContractEditor({
       ) as typeof emptyContract,
     );
     setEditing(false);
+    setConfirmed(c.validation_criteria_complete === true);
   }, [h.id, c.revision, c.lockedAt]);
   return (
     <article className="rw-card rw-contract">
@@ -127,10 +130,11 @@ function ContractEditor({
               </label>
             ))}
           </div>
+          <label><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} />我已确认验证标准完整（与证据支持或反驳独立）</label>
           <div className="rw-actions">
             <button
               onClick={() =>
-                void act(c.lockedAt ? "revise" : "edit", draft, h.id)
+                void act(c.lockedAt ? "revise" : "edit", { ...draft, validation_criteria_complete: confirmed }, h.id)
               }
             >
               {c.lockedAt ? "保存为新版本" : "保存草案"}
@@ -138,7 +142,7 @@ function ContractEditor({
             {!c.lockedAt && (
               <button
                 className="primary"
-                onClick={() => void act("lock", draft, h.id)}
+                onClick={() => void act("lock", { ...draft, validation_criteria_complete: confirmed }, h.id)}
               >
                 锁定此版本
               </button>
@@ -902,8 +906,8 @@ export default function GtmRealWorkspace() {
                               (c) => c.usage.totalTokens === null,
                             ).length
                           }{" "}
-                          · 覆盖片段 {run.coverage.selectedUnits}/
-                          {run.coverage.availableUnits}（未评估{" "}
+                          · 本轮检索选中 {run.coverage.selectedUnits}/
+                          {run.coverage.availableUnits}（未选中{" "}
                           {run.coverage.omittedUnits}）
                         </p>
                         {run.error && (
@@ -1000,6 +1004,13 @@ export default function GtmRealWorkspace() {
               )}
               {tab === "evidence" && (
                 <>
+                  <section className="rw-card">
+                    <h2>Chunk-level Evidence Ledger</h2>
+                    <p>仅实际进入模型请求正文且收到响应的片段记为已评估；不表示结论成立。未读内容仍待研究，已读未发现不代表全材料不存在证据。</p>
+                    <div className="rw-table-wrap"><table><thead><tr><th>Hypothesis / Version</th><th>Source Version</th><th>总片段</th><th>已评估</th><th>未读</th><th>覆盖比例</th><th>本轮新增</th></tr></thead><tbody>
+                    {(view?.chunkCoverage ?? []).filter(c => hypotheses.some(h => h.id === c.hypothesis_id)).map(c => <tr key={c.hypothesis_id + c.materialKey}><td>{c.hypothesis_id.slice(0,8)} / r{c.hypothesis_version}</td><td>{c.materialKey}<details><summary>仍待研究的 Chunk</summary>{c.unread_chunk_ids.join(", ") || "无"}</details></td><td>{c.total_chunks}</td><td>{c.evaluated_chunks}</td><td>{c.unread_chunks_remaining}</td><td>{(c.coverage_ratio * 100).toFixed(1)}%</td><td>{c.newly_read_chunks.join(", ") || "无"}</td></tr>)}
+                    </tbody></table></div>
+                  </section>
                   <section className="rw-card">
                     <div className="rw-row">
                       <div>

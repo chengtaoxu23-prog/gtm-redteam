@@ -21,17 +21,27 @@ import { estimateRequestTokens } from "./gtm-budget.js";
 import { rolePrompt, parseAgentOutput } from "./research-agents.js";
 import { digest, materialKey } from "./research-materials.js";
 import { SchemaError } from "./validation.js";
+import { validationFields } from "./contract-validation.js";
+import { coverageRecords, unitCoverageKey } from "./workspace-coverage.js";
 const now = () => new Date().toISOString();
 export function selectResearchSources(
   project: ResearchProject,
   materials: Material[],
   query: string,
+  options: { role?: ResearchRole; unread?: Set<string> } = {},
 ) {
   const tokens = [
     ...new Set(
       query.toLowerCase().match(/[a-z]{3,}|[\u4e00-\u9fff]{2,5}/g) ?? [],
     ),
   ];
+  const roleTerms: Partial<Record<ResearchRole, string[]>> = {
+    competitor: ["pricing", "subscription", "tiers", "usage limits", "billing", "competitor", "free trial", "定价", "竞品"],
+    customer: ["interview", "purchase objection", "willingness to pay", "alternative", "workflow pain", "switching cost", "feedback", "访谈", "付费"],
+    market: ["market size", "distribution", "acquisition", "geographic", "market entry", "regulation", "市场", "渠道"],
+    business: ["regulation", "compliance", "operational", "risk", "cost", "margin", "监管", "成本"],
+    redteam: ["risk", "objection", "failure", "limitation", "contradiction", "反对", "限制"],
+  };
   const all = materials.flatMap((m) =>
     m.units.map((u) => ({
       m,
@@ -39,9 +49,10 @@ export function selectResearchSources(
       score: tokens.reduce(
         (n, t) => n + (u.text.toLowerCase().includes(t) ? 1 : 0),
         0,
-      ),
+      ) * (1 + (roleTerms[options.role ?? "planner"] ?? []).filter(t => u.text.toLowerCase().includes(t)).length),
     })),
   );
+  const eligible = options.unread ? all.filter(e => options.unread!.has(unitCoverageKey(materialKey(e.m), e.u.id))) : all;
   const selected: typeof all = [];
   let chars = 0;
   const add = (entry: (typeof all)[number]) => {
@@ -56,12 +67,12 @@ export function selectResearchSources(
   };
   // At least one relevant unit per material, then lexical relevance. Full original remains available.
   for (const m of materials) {
-    const best = all
+    const best = eligible
       .filter((e) => e.m === m)
       .sort((a, b) => b.score - a.score)[0];
     if (best) add(best);
   }
-  for (const entry of all.sort((a, b) => b.score - a.score)) add(entry);
+  for (const entry of eligible.sort((a, b) => b.score - a.score)) add(entry);
   const sources: SourceSnapshot[] = [],
     selectedUnits: WorkspaceRun["selectedUnits"] = [],
     included = new Set<string>();
@@ -72,7 +83,7 @@ export function selectResearchSources(
         .slice(Math.max(0, center - 2), center + 3)
         .filter((v) => !included.has(materialKey(m) + v.id));
     if (
-      !near.length ||
+      sources.length >= 20 || !near.length ||
       contextChars + near.reduce((n, v) => n + v.text.length, 0) > 48000
     )
       continue;
@@ -187,30 +198,19 @@ export class WorkspaceEngine {
       throw new SchemaError("请先生成并人工锁定所有当前 Contract");
     if (kind === "plan" && hypotheses.length)
       throw new SchemaError("项目已有 Contracts，请编辑或创建新版本");
-    let keys = project.materialKeys;
-    if (kind === "delta") {
-      const assessed = new Set(
-        state.runs
-          .filter(
-            (r) =>
-              r.projectId === projectId &&
-              r.committed &&
-              r.kind !== "plan" &&
-              r.hypotheses.every((old) =>
-                hypotheses.some(
-                  (h) =>
-                    h.id === old.id &&
-                    h.contracts.at(-1)!.revision ===
-                      old.contracts.at(-1)!.revision,
-                ),
-              ),
-          )
-          .flatMap((r) => r.sourceKeys),
-      );
-      keys = keys.filter((key) => !assessed.has(key));
-      if (!keys.length)
-        throw new SchemaError("没有未评估的新材料；相同内容不重复请求模型");
+    const keys = project.materialKeys;
+    const records = coverageRecords(state.runs);
+    const unread = new Set<string>();
+    for (const key of keys) {
+      const m = state.materials.find(m => materialKey(m) === key);
+      for (const u of m?.units ?? [])
+        if (hypotheses.some(h => !records.some(r =>
+          r.hypothesis_id === h.id && r.hypothesis_version === h.contracts.at(-1)!.revision &&
+          r.source_id === m!.id && r.source_version === m!.revision && r.chunk_id === u.id && r.content_hash === digest(u.text))))
+          unread.add(unitCoverageKey(key, u.id));
     }
+    if (kind === "delta" && !unread.size)
+      throw new SchemaError("没有未评估的新材料或片段；相同内容不重复请求模型");
     const materials = keys
       .map((key) => state.materials.find((m) => materialKey(m) === key)!)
       .filter(Boolean);
@@ -228,7 +228,17 @@ export class WorkspaceEngine {
         : kind === "delta"
           ? ["redteam", "verifier", "decision"]
           : [...RESEARCH_ROLES];
+    const roleSelections: WorkspaceRun["roleSelections"] = {};
+    for (const role of roles.filter(r => r !== "verifier" && r !== "decision"))
+      roleSelections[role] = selectResearchSources(project, materials,
+        project.brief + " " + hypotheses.map(h => JSON.stringify(h.contracts.at(-1))).join(" "),
+        { role, ...(kind === "delta" ? { unread } : {}) });
+    const allSelections = Object.values(roleSelections);
+    const sourceMap = new Map(allSelections.flatMap(s => s.sources).map(s => [s.id, s]));
+    const unitMap = new Map(allSelections.flatMap(s => s.selectedUnits).map(u => [u.sourceId + ":" + u.paragraphId, u]));
+    const budgetKey = digest(JSON.stringify({ projectId, kind, keys, hypotheses: hypotheses.map(h => [h.id, h.contracts.at(-1)]), units: [...unitMap.values()] }));
     const run: WorkspaceRun = {
+      budgetKey, chunkEvaluations: [], roleSelections,
       id: randomUUID(),
       projectId,
       kind,
@@ -247,6 +257,8 @@ export class WorkspaceEngine {
       })),
       sourceKeys: keys,
       ...selection,
+      sources: [...sourceMap.values()],
+      selectedUnits: [...unitMap.values()],
       hypotheses: structuredClone(hypotheses),
       verifiedClaims: [],
       error: null,
@@ -315,6 +327,7 @@ export class WorkspaceEngine {
       const project = (await this.repo.load()).projects.find(
         (p) => p.id === run.projectId,
       )!;
+      const materialsForRun = (await this.repo.load()).materials;
       for (const execution of run.roles) {
         if (execution.status === "completed") continue;
         run = await this.run(id);
@@ -323,6 +336,7 @@ export class WorkspaceEngine {
           id: h.id,
           status: h.status,
           contract: h.contracts.at(-1),
+          validation: validationFields(h.contracts.at(-1)!),
           previousEvidence: h.deltas.map((d) => ({
             id: d.id,
             relation: d.relation,
@@ -343,7 +357,7 @@ export class WorkspaceEngine {
           kind: run.kind,
           project,
           hypotheses: contracts,
-          sourceSnapshots: run.sources.map((s) => ({
+          sourceSnapshots: (run.roleSelections?.[role]?.sources ?? run.sources).map((s) => ({
             id: s.id,
             revision: s.revision,
             title: s.title,
@@ -415,7 +429,8 @@ export class WorkspaceEngine {
         let repair: string | null = null;
         for (;;) {
           run = await this.run(id);
-          if (run.calls.length >= 16) throw Error("request_budget_exhausted");
+          const budgetRuns = (await this.repo.load()).runs.filter(r => r.id === run.id || (run.budgetKey && r.budgetKey === run.budgetKey));
+          if (budgetRuns.reduce((n, r) => n + r.calls.length, 0) >= 16) throw Error("request_budget_exhausted");
           const attempt = run.calls.filter((c) => c.role === role).length + 1;
           const request = {
             stage:
@@ -492,6 +507,19 @@ export class WorkspaceEngine {
               c.returnedModel = response.returnedModel;
               c.httpStatus = response.httpStatus;
               c.finishReason = response.finishReason;
+              if (role !== "verifier" && role !== "decision" && r.kind !== "plan") {
+                const selection = r.roleSelections?.[role] ?? r;
+                for (const h of r.hypotheses)
+                  for (const u of selection.selectedUnits) {
+                    const m = materialsForRun.find(m => materialKey(m) === u.materialKey);
+                    const unit = m?.units.find(v => v.id === u.unitId);
+                    if (!m || !unit) continue;
+                    if ((r.chunkEvaluations ??= []).some(e => e.call_id === callId && e.hypothesis_id === h.id && e.source_id === m.id && e.chunk_id === unit.id)) continue;
+                    r.chunkEvaluations.push({ hypothesis_id: h.id, hypothesis_version: h.contracts.at(-1)!.revision,
+                      source_id: m.id, source_version: m.revision, chunk_id: unit.id, content_hash: digest(unit.text),
+                      entered_model_context: true, run_id: r.id, call_id: callId, evaluated_at: now(), role });
+                  }
+              }
             });
             if (sanitized.blocked) throw Error("secret_in_output_blocked");
             if (response.finishReason !== "stop" || response.toolCalls?.length)
@@ -511,7 +539,7 @@ export class WorkspaceEngine {
               throw Error("unknown_hypothesis_id");
             const checked = checkClaims(
               output.claims,
-              run.sources,
+              run.roleSelections?.[role]?.sources ?? run.sources,
               createAuditDraft({ businessBrief: "Citation validation" }),
             );
             const failures = checked.flatMap((c) =>
@@ -674,11 +702,18 @@ export class WorkspaceEngine {
                     ? "insufficient_evidence"
                     : (assessment?.direction ?? "insufficient_evidence");
                 const id = randomUUID();
-                ids.push(id);
+                const evidenceKey = (claim: VerifiedClaim, units: WorkspaceRun["selectedUnits"]) => claim.candidate.citations.map(c => {
+                  const u = units.find(u => u.sourceId === c.sourceId && u.paragraphId === c.paragraphId);
+                  return [u?.materialKey ?? c.sourceId, u?.unitId ?? c.paragraphId, c.quote.trim()];
+                }).sort((a,b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+                const fingerprint = digest(JSON.stringify(evidenceKey(verified, run.selectedUnits)));
+                if (h.deltas.some(d => d.runId !== run.id && d.contractRevision === revision && d.evidenceFingerprint === fingerprint)) continue;
+                if (["supporting", "contradicting"].includes(relation)) ids.push(id);
                 const src = verified.candidate.citations[0];
                 h.deltas.push({
                   id,
                   runId: run.id,
+                  evidenceFingerprint: fingerprint,
                   contractRevision: revision,
                   sourceId: src.sourceId,
                   sourceRevision: src.materialRevision,
@@ -710,21 +745,12 @@ export class WorkspaceEngine {
               const relations = h.deltas
                 .filter((d) => d.contractRevision === revision)
                 .map((d) => d.relation);
-              const c = h.contracts.at(-1)!,
-                criteriaUnknown =
-                  !c.decisionThreshold ||
-                  !c.validationWindow ||
-                  /unknown|待人工|待填写/i.test(
-                    c.decisionThreshold + " " + c.validationWindow,
-                  );
               const met = run.roles
                 .find((r) => r.role === "verifier")
                 ?.output?.assessments?.some(
                   (a) => a.hypothesisId === h.id && a.criteriaMet,
                 );
-              const to: HypothesisStatus = criteriaUnknown
-                ? "needs_research"
-                : relations.includes("supporting") &&
+              const to: HypothesisStatus = relations.includes("supporting") &&
                     relations.includes("contradicting")
                   ? "needs_research"
                   : relations.includes("contradicting")
@@ -740,6 +766,7 @@ export class WorkspaceEngine {
                 `Real ${run.kind} run ${run.id}; ${ids.length} new evidence records. Omitted source units: ${run.coverage.omittedUnits}. Contract thresholds require human review.`,
                 ids,
               );
+              if (!ids.length) continue;
               h.proposals.push({
                 id: randomUUID(),
                 contractRevision: revision,

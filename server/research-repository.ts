@@ -98,6 +98,8 @@ export class ResearchRepository {
             type,
             reason,
             evidenceIds,
+            deltaIds: evidenceIds.filter(id => h.deltas.some(d => d.id === id)),
+            runId: (input as { runId?: string })?.runId ?? h.deltas.find(d => evidenceIds.includes(d.id))?.runId,
             from,
             to: h.status,
             ...(type === "Transition Proposed"

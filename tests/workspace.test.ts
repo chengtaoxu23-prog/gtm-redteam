@@ -175,7 +175,7 @@ test("workspace serialization prevents lost writes and corruption refuses overwr
   await assert.rejects(() => repo.update(() => {}), /integrity/);
   assert.equal(await readFile(repo.file, "utf8"), before);
 });
-async function setup(malicious = false) {
+async function setup(malicious = false, evidenceDirection = "supporting") {
   const dir = await mkdtemp(path.join(os.tmpdir(), "gtm-agents-")),
     repo = new WorkspaceRepository(dir),
     research = new ResearchRepository(path.join(dir, "hypotheses"));
@@ -250,7 +250,7 @@ async function setup(malicious = false) {
         output.assessments = input.claimContracts.map((c: any) => ({
           claimId: c.claimId,
           hypothesisId: c.hypothesisId,
-          direction: "supporting",
+          direction: evidenceDirection,
           criteriaMet: false,
           reasoning: "Contract threshold requires human review.",
         }));
@@ -278,6 +278,10 @@ async function setup(malicious = false) {
             ],
           },
         ];
+      }
+      // Each contract needs relevant evidence before it can receive a proposal.
+      if (["customer", "business"].includes(role) && input.hypotheses.length >= 3) {
+        output.claims.push({ ...structuredClone(output.claims[0]), id: role + "-c2", hypothesisId: input.hypotheses[role === "customer" ? 1 : 2].id });
       }
       if (malicious) output.classification = "material_fact";
       return new Response(
@@ -638,4 +642,63 @@ test("CSV empty and whitespace fields preserve raw values and coordinates", asyn
     "  ",
   );
   assert.equal(parsed.units.length, 6);
+});
+
+async function lockedSetup(direction = "supporting") {
+  const f = await setup(false, direction);
+  const plan = await f.engine.create(f.p.id, "plan", true);
+  f.engine.launch(plan.id);
+  assert.equal((await f.engine.wait(plan.id)).status, "completed");
+  const state = await f.research.load();
+  await f.research.transact(randomUUID(), state.revision, {}, (s, emit) => {
+    for (const h of s.hypotheses) { h.contracts[0].lockedAt = new Date().toISOString(); emit("Contract Locked", h, "Isolated test lock"); }
+  });
+  return f;
+}
+test("long source delta continues unread chunks; coverage is version scoped and never inferred from retrieval", async () => {
+  const { hypothesisCoverage } = await import("../server/workspace-coverage.js");
+  const f = await lockedSetup();
+  const large = await ingestMaterial(Buffer.from(Array.from({length: 100}, (_,i) => `Official pricing: subscription plans are offered. Paragraph ${i}. ` + "research ".repeat(330)).join("\n\n")), "long.txt");
+  await f.repo.update(s => { s.materials.push(large); s.projects[0].materialKeys = [materialKey(large)]; });
+  const first = await f.engine.create(f.p.id, "research", true);
+  const h = (await f.research.load()).hypotheses[0];
+  assert.equal(hypothesisCoverage(h, [large], (await f.repo.load()).runs)[0].evaluated_chunks, 0, "selected is not evaluated");
+  f.engine.launch(first.id); const done = await f.engine.wait(first.id);
+  assert.equal(done.status, "completed", done.error ?? "");
+  const before = hypothesisCoverage(h, [large], (await f.repo.load()).runs)[0];
+  assert(before.evaluated_chunks > 0 && before.unread_chunks_remaining > 0);
+  const second = await f.engine.create(f.p.id, "delta", true);
+  assert(second.selectedUnits.some(u => before.unread_chunk_ids.includes(u.unitId)));
+  f.engine.launch(second.id); assert.equal((await f.engine.wait(second.id)).status, "completed");
+  const after = hypothesisCoverage(h, [large], (await f.repo.load()).runs, second.id)[0];
+  assert(after.evaluated_chunks > before.evaluated_chunks);
+  assert(after.newly_read_chunks.length > 0);
+  const revised = structuredClone(h); revised.contracts[0].revision++;
+  assert.equal(hypothesisCoverage(revised, [large], (await f.repo.load()).runs)[0].evaluated_chunks, 0);
+  assert.equal(hypothesisCoverage(h, [{...large, revision: "changed"}], (await f.repo.load()).runs)[0].evaluated_chunks, 0);
+  assert(done.chunkEvaluations!.every(e => e.entered_model_context && e.content_hash.length === 64 && e.call_id));
+});
+test("irrelevant verified context produces observations without approvals", async () => {
+  const f = await lockedSetup("contextual"); const run = await f.engine.create(f.p.id, "research", true);
+  f.engine.launch(run.id); assert.equal((await f.engine.wait(run.id)).status, "completed");
+  const s = await f.research.load(); assert(s.hypotheses.every(h => h.proposals.length === 0 && h.status === "unassessed"));
+  assert(s.events.some(e => e.type === "Evidence Delta Assessed"));
+});
+test("counterevidence is not downgraded by incomplete criteria; reports freeze historical contracts", async () => {
+  const { validationFields } = await import("../server/contract-validation.js");
+  const f = await lockedSetup("contradicting"); const run = await f.engine.create(f.p.id, "research", true);
+  f.engine.launch(run.id); const done = await f.engine.wait(run.id); assert.equal(done.status, "completed");
+  let s = await f.research.load(); assert(s.hypotheses.every(h => h.proposals[0].to === "challenged"));
+  assert.equal(validationFields(s.hypotheses[0].contracts[0]).validation_criteria_complete, false);
+  await f.research.transact(randomUUID(), s.revision, {}, (s, emit) => { const h=s.hypotheses[0]; h.contracts.push({...h.contracts[0], revision:2, statement:"NEW CONTRACT ONLY", supporting:"NEW SUCCESS ONLY"}); emit("Contract Revised",h,"Test revision"); });
+  s=await f.research.load(); const report=researchReport(f.p, done, (await f.repo.load()).materials, s);
+  assert.match(report,/Historical Research Context/); assert.match(report,/Current Hypothesis State/);
+  assert(!report.split("## Current Hypothesis State")[0].includes("NEW SUCCESS ONLY"));
+  assert.match(report,/current r2/);
+});
+test("restarting the same failed audit cannot obtain a fresh shared budget", async () => {
+  const f=await setup(true);
+  for(let i=0;i<8;i++) { const run=await f.engine.create(f.p.id,"plan",true); f.engine.launch(run.id); assert.equal((await f.engine.wait(run.id)).status,"failed"); }
+  const run=await f.engine.create(f.p.id,"plan",true); f.engine.launch(run.id);
+  const stopped=await f.engine.wait(run.id); assert.equal(stopped.status,"paused"); assert.equal(stopped.calls.length,0); assert.equal(f.requests,16);
 });

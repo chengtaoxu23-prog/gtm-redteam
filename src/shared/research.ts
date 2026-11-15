@@ -6,6 +6,11 @@ export type HypothesisStatus =
   | "inconclusive"
   | "needs_research";
 export interface Contract {
+  validation_criteria_complete?: boolean;
+  missing_validation_fields?: string[];
+  success_criteria?: string;
+  failure_criteria?: string;
+  validation_window?: string;
   market?: string;
   customerSegment?: string;
   validationWindow?: string;
@@ -21,6 +26,7 @@ export interface Contract {
   lockedAt: string | null;
 }
 export interface Delta {
+  evidenceFingerprint?: string;
   id: string;
   contractRevision: number;
   sourceId: string;
@@ -70,6 +76,8 @@ export interface Hypothesis {
   audits: { auditId: string; contractRevision: number; sourceIds: string[] }[];
 }
 export interface DecisionEvent {
+  runId?: string;
+  deltaIds?: string[];
   actor?: "user" | "assistant_acceptance" | "agent";
   projectId?: string;
   id: string;
