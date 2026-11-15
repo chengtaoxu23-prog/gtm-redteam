@@ -1,3 +1,4 @@
+import { ModelIdentity } from './WorkspaceUI';
 import { useEffect, useState } from 'react';
 import type { HealthResponse, SeminarSession } from '../../src/shared/types';
 import { ArrowIcon, Spinner, StageBadge, clockLabel } from './Common';
@@ -62,7 +63,7 @@ export function Setup({
       <header className="site-header">
         <button type="button" className="brand brand-button" onClick={onBack}>
           <span className="brand-mark">S</span>
-          <span className="brand-word">SeminarRoom</span>
+          <span className="brand-word">GTM-RedTeam</span>
         </button>
         <div className="setup-progress">
           <span className="done">材料</span>
@@ -212,7 +213,7 @@ export function Setup({
               <div>
                 <dt>模型</dt>
                 <dd>
-                  {session.provider.model} @ {session.provider.baseUrlHost}
+                  <ModelIdentity model={session.provider.model} /> @ {session.provider.baseUrlHost}
                 </dd>
               </div>
               <div>

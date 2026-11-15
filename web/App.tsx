@@ -111,10 +111,10 @@ export default function App() {
   useEffect(() => {
     const title =
       view === 'room' && session
-        ? `${session.config.topic} · SeminarRoom`
+        ? `${session.config.topic} · GTM-RedTeam`
         : view === 'replay' && replay
-          ? `${replay.title} · SeminarRoom`
-          : 'SeminarRoom · 材料研讨室';
+          ? `${replay.title} · GTM-RedTeam`
+          : 'GTM-RedTeam · 材料研讨室';
     document.title = title;
     window.scrollTo({ top: 0 });
   }, [view, session?.config.topic, replay?.title]);
@@ -231,7 +231,7 @@ export default function App() {
     return (
       <div className="boot-screen">
         <div className="boot-mark">S</div>
-        <h1>SeminarRoom</h1>
+        <h1>GTM-RedTeam</h1>
         <p>正在读取本地服务与会话…</p>
         <Spinner size={20} />
       </div>
