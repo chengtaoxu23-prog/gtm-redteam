@@ -58,7 +58,10 @@ export function mountWorkspaceApi(
       // avoid returning a completed run alongside a pre-commit hypothesis list.
       const state = await repo.load(),
         ledger = await research.load();
-      for (const run of state.runs) run.deltas = workspaceDeltas(run, ledger);
+      for (const run of state.runs) {
+        run.deltas = workspaceDeltas(run, ledger);
+        run.budgetUsed = state.runs.filter(r => r.id === run.id || (run.budgetKey && r.budgetKey === run.budgetKey)).reduce((n,r) => n + r.calls.length, 0);
+      }
       r.json({
         state,
         ledger,

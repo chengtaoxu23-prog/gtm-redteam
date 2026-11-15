@@ -1,0 +1,18 @@
+import {chromium} from 'playwright-core';
+import {existsSync} from 'node:fs';
+import {mkdir} from 'node:fs/promises';
+const executable=[process.env.LOCALAPPDATA+'/Google/Chrome/Application/chrome.exe','C:/Program Files/Google/Chrome/Application/chrome.exe','C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'].find(p=>existsSync(p));
+const browser=await chromium.launch({headless:true,executablePath:executable});
+const page=await browser.newPage({viewport:{width:1600,height:1000}});
+const project=process.env.GTM_CAPTURE_PROJECT;
+if (!project) throw Error("Set GTM_CAPTURE_PROJECT to the authorized public case ID");
+await page.goto((process.env.GTM_ACCEPTANCE_URL ?? "http://127.0.0.1:4318") + "/?project=" + encodeURIComponent(project));
+await page.getByRole('navigation').getByRole('button',{name:/Hypotheses/}).click();
+await page.locator('.rw-contract').first().waitFor();
+await mkdir('docs/screenshots',{recursive:true});
+await page.screenshot({path:'docs/screenshots/pilot-hypotheses.png'});
+await page.getByRole('navigation').getByRole('button',{name:/Evidence Ledger/}).click();
+await page.getByRole('heading',{name:'Chunk-level Evidence Ledger',exact:true}).waitFor();
+await page.screenshot({path:'docs/screenshots/pilot-evidence.png'});
+console.log(JSON.stringify({screenshots:['pilot-hypotheses.png','pilot-evidence.png'],horizontalOverflow:await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)}));
+await browser.close();

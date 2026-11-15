@@ -187,7 +187,9 @@ const result = {
   })),
   humanApproval: pending.length
     ? "PENDING: not fabricated or delegated to AI"
-    : "Recorded human decisions in the ledger; no decision created by this script",
+    : "No pending recommendation; consult actual human events. This script creates no business approval.",
+  manualVerificationTime: "not measured",
+  researchElapsedMs: runs.filter(r => r.kind !== "plan").map(r => ({runId:r.id,elapsedMs:Date.parse(r.updatedAt)-Date.parse(r.createdAt)})),
   humanApprovedEvents: current.ledger.events.filter(
     (e) =>
       e.projectId === p.id &&

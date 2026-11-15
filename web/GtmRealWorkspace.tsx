@@ -114,7 +114,7 @@ function ContractEditor({
           {h.status} · r{h.statusRevision}
         </span>
       </div>
-      <h3>{c.statement}</h3>
+      <h3>{c.statement}</h3><p className="rw-muted">验证标准：{c.validation_criteria_complete === true ? "已确认完整" : "未确认完整"} · {c.missing_validation_fields?.join("、") || "历史契约或待确认"}</p>
       <small className="rw-mono">{h.id}</small>
       {!c.lockedAt || editing ? (
         <>
@@ -555,7 +555,7 @@ export default function GtmRealWorkspace() {
     <div className="rw-app">
       <aside className="rw-sidebar">
         <a className="rw-brand" href="/">
-          GTM<span>RedTeam</span>
+          GTM-<span>RedTeam</span>
           <small>RESEARCH WORKSPACE</small>
         </a>
         <label className="rw-project-label">
@@ -894,8 +894,8 @@ export default function GtmRealWorkspace() {
                           ))}
                         </div>
                         <p className="rw-muted">
-                          真实请求 {run.calls.length} / {run.maxCalls} · 剩余{" "}
-                          {run.maxCalls - run.calls.length} · 已知实际 Token{" "}
+                          本轮真实请求 {run.calls.length} · 同范围共享预算已用 {run.budgetUsed ?? run.calls.length} / {run.maxCalls} · 剩余{" "}
+                          {Math.max(0, run.maxCalls - (run.budgetUsed ?? run.calls.length))} · 已知实际 Token{" "}
                           {run.calls.reduce(
                             (n, c) => n + (c.usage.totalTokens ?? 0),
                             0,
@@ -1008,7 +1008,7 @@ export default function GtmRealWorkspace() {
                     <h2>Chunk-level Evidence Ledger</h2>
                     <p>仅实际进入模型请求正文且收到响应的片段记为已评估；不表示结论成立。未读内容仍待研究，已读未发现不代表全材料不存在证据。</p>
                     <div className="rw-table-wrap"><table><thead><tr><th>Hypothesis / Version</th><th>Source Version</th><th>总片段</th><th>已评估</th><th>未读</th><th>覆盖比例</th><th>本轮新增</th></tr></thead><tbody>
-                    {(view?.chunkCoverage ?? []).filter(c => hypotheses.some(h => h.id === c.hypothesis_id)).map(c => <tr key={c.hypothesis_id + c.materialKey}><td>{c.hypothesis_id.slice(0,8)} / r{c.hypothesis_version}</td><td>{c.materialKey}<details><summary>仍待研究的 Chunk</summary>{c.unread_chunk_ids.join(", ") || "无"}</details></td><td>{c.total_chunks}</td><td>{c.evaluated_chunks}</td><td>{c.unread_chunks_remaining}</td><td>{(c.coverage_ratio * 100).toFixed(1)}%</td><td>{c.newly_read_chunks.join(", ") || "无"}</td></tr>)}
+                    {(view?.chunkCoverage ?? []).filter(c => hypotheses.some(h => h.id === c.hypothesis_id)).map(c => <tr key={c.hypothesis_id + c.materialKey}><td>{c.hypothesis_id.slice(0,8)} / r{c.hypothesis_version}</td><td><b>{materials.find(m => key(m) === c.materialKey)?.title}</b><details><summary>材料版本与待研究 Chunk</summary>{c.materialKey}<br />{c.unread_chunk_ids.join(", ") || "无"}</details></td><td>{c.total_chunks}</td><td>{c.evaluated_chunks}</td><td>{c.unread_chunks_remaining}</td><td>{(c.coverage_ratio * 100).toFixed(1)}%</td><td>{c.newly_read_chunks.length} 个<details><summary>查看片段</summary>{c.newly_read_chunks.join(", ") || "无"}</details></td></tr>)}
                     </tbody></table></div>
                   </section>
                   <section className="rw-card">
@@ -1141,7 +1141,7 @@ export default function GtmRealWorkspace() {
                       {unitMatches.slice(0, 60).map((u) => (
                         <div className="rw-unit" key={u.id}>
                           <b>{u.locator}</b>
-                          <small>{u.id}</small>
+                          <small>{u.id} · {(view?.chunkCoverage ?? []).filter(c => c.materialKey === key(material) && hypotheses.some(h => h.id === c.hypothesis_id)).map(c => `${c.hypothesis_id.slice(0,8)} r${c.hypothesis_version}: ${c.unread_chunk_ids.includes(u.id) ? "未读" : "已进入模型上下文"}`).join(" / ") || "未评估"}</small>
                           <pre>{u.text}</pre>
                           {u.formula !== undefined && (
                             <dl className="rw-criteria">
@@ -1300,7 +1300,15 @@ export default function GtmRealWorkspace() {
                   <p className="rw-muted">
                     记录包括 AI 建议与人工决定；只有人工批准会改变正式状态。
                   </p>
-                  <div className="rw-timeline">
+                  <details open><summary>完整研究与材料时间线</summary><div className="rw-timeline">
+                    {[...events.map(e => ({id:e.id,at:e.at,title:e.type,body:e.reason})),
+                      ...(project.imports ?? []).map(i => ({id:i.id,at:i.at,title:`Material ${i.classification}`,body:`${i.name} · ${i.reason}`})),
+                      ...view!.state.runs.filter(r => r.projectId === projectId).flatMap(r => [
+                        {id:r.id+"-start",at:r.createdAt,title:`Research ${r.kind} started`,body:`Run ${r.id}`},
+                        {id:r.id+"-status",at:r.updatedAt,title:`Research ${r.kind}: ${r.status}`,body:`Run ${r.id} · ${r.calls.length} requests · ${r.error ?? ""}`}])]
+                      .sort((a,b) => b.at.localeCompare(a.at)).map(item => <article key={item.id}><time>{dt(item.at)}</time><h3>{item.title}</h3><p>{item.body}</p></article>)}
+                  </div></details>
+                  <details><summary>人工决策与完整性明细</summary><div className="rw-timeline">
                     {[...events].reverse().map((e) => (
                       <article key={e.id}>
                         <time>{dt(e.at)}</time>
@@ -1328,6 +1336,7 @@ export default function GtmRealWorkspace() {
                       </article>
                     ))}
                   </div>
+                  </details>
                   {!events.length && (
                     <div className="rw-empty">
                       创建假设后，这里将保留契约、证据、建议及人工决策的完整过程。

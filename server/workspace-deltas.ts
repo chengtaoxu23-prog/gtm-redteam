@@ -37,14 +37,14 @@ export function workspaceDeltas(
       hypothesisId: frozen?.id ?? null,
       contractRevision: frozen?.contracts.at(-1)?.revision ?? null,
       runId: run.id,
-      relation:
+      relation: record?.relation === "duplicate" ? "duplicate" :
         verified.classification === "insufficient_evidence" ||
         verified.classification === "hypothesis"
           ? "insufficient_evidence"
           : (assessment?.direction ?? "contextual"),
       sourceKeys: sources,
       previousEvidenceIds: frozen?.deltas.map((d) => d.id) ?? [],
-      newEvidenceIds: [record?.id ?? `claim:${run.id}:${candidate.id}`],
+      newEvidenceIds: record?.relation === "duplicate" ? [] : [record?.id ?? `claim:${run.id}:${candidate.id}`],
       previousStatus: frozen?.status ?? null,
       proposedStatus: proposal?.to ?? frozen?.status ?? null,
       reason:

@@ -129,6 +129,7 @@ export interface ChunkEvaluation {
 }
 export interface WorkspaceRun {
   budgetKey?: string;
+  budgetUsed?: number;
   chunkEvaluations?: ChunkEvaluation[];
   roleSelections?: Partial<Record<ResearchRole, Pick<WorkspaceRun, "sources" | "selectedUnits" | "coverage">>>;
   id: string;

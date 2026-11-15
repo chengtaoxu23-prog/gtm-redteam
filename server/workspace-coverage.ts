@@ -8,7 +8,9 @@ export function hypothesisCoverage(h: Hypothesis, materials: Material[], runs: W
   const records = coverageRecords(runs).filter(r => r.hypothesis_id === h.id && r.hypothesis_version === h.contracts.at(-1)!.revision);
   return materials.map(m => {
     const evaluated = m.units.filter(u => records.some(r => r.source_id === m.id && r.source_version === m.revision && r.chunk_id === u.id && r.content_hash === digest(u.text)));
-    const added = evaluated.filter(u => records.some(r => r.source_id === m.id && r.source_version === m.revision && r.chunk_id === u.id && r.run_id === currentRunId));
+    const currentRun = runs.find(r => r.id === currentRunId);
+    const previous = coverageRecords(runs.filter(r => r.id !== currentRunId && currentRun && r.createdAt < currentRun.createdAt));
+    const added = evaluated.filter(u => !previous.some(r => r.hypothesis_id === h.id && r.hypothesis_version === h.contracts.at(-1)!.revision && r.source_id === m.id && r.source_version === m.revision && r.chunk_id === u.id) && records.some(r => r.source_id === m.id && r.source_version === m.revision && r.chunk_id === u.id && r.run_id === currentRunId));
     return { hypothesis_id: h.id, hypothesis_version: h.contracts.at(-1)!.revision, materialKey: materialKey(m), total_chunks: m.units.length,
       evaluated_chunks: evaluated.length, unread_chunks_remaining: m.units.length - evaluated.length,
       coverage_ratio: m.units.length ? evaluated.length / m.units.length : 0, newly_read_chunks: added.map(u => u.id),

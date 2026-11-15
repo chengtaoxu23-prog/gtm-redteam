@@ -58,7 +58,7 @@ export function researchReport(
     "",
     "## Evidence scope and limits",
     "",
-    `${run.coverage.selectedUnits} / ${run.coverage.availableUnits} source units selected for retrieval; ${run.coverage.omittedUnits} units not assessed. ${esc(run.coverage.strategy)}`,
+    `${new Set(run.selectedUnits.map(u => u.materialKey + ":" + u.unitId)).size} / ${run.coverage.availableUnits} source units selected for this run. Cumulative evaluated/unread coverage is listed per contract below; selection is not assessment. ${esc(run.coverage.strategy)}`,
     "",
     "Publication dates marked unknown remain unknown. Acquisition time does not establish freshness. Vendor claims are attributed to their publisher. No measured customer demand, CAC or LTV is inferred from public pricing pages.",
     "",
@@ -92,7 +92,7 @@ export function researchReport(
   for (const evidenceRun of included) {
     lines.push(
       `### Evidence run ${evidenceRun.id} · ${evidenceRun.kind}`,
-      `Coverage: ${evidenceRun.coverage.selectedUnits}/${evidenceRun.coverage.availableUnits}; unassessed ${evidenceRun.coverage.omittedUnits}.`,
+      `Retrieval selection: ${new Set(evidenceRun.selectedUnits.map(u => u.materialKey + ":" + u.unitId)).size}/${evidenceRun.coverage.availableUnits}. Actual cumulative evaluated/unread coverage is listed per contract above.`,
       "",
     );
     for (const claim of evidenceRun.verifiedClaims) {

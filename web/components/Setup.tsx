@@ -63,7 +63,7 @@ export function Setup({
       <header className="site-header">
         <button type="button" className="brand brand-button" onClick={onBack}>
           <span className="brand-mark">S</span>
-          <span className="brand-word">SeminarRoom</span>
+          <span className="brand-word">GTM-RedTeam</span>
         </button>
         <div className="setup-progress">
           <span className="done">材料</span>

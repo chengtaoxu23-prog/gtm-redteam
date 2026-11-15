@@ -257,6 +257,10 @@ export class WorkspaceEngine {
       })),
       sourceKeys: keys,
       ...selection,
+      coverage: { ...selection.coverage,
+        selectedUnits: new Set([...unitMap.values()].map(u => unitCoverageKey(u.materialKey,u.unitId))).size,
+        omittedUnits: selection.coverage.availableUnits - new Set([...unitMap.values()].map(u => unitCoverageKey(u.materialKey,u.unitId))).size,
+        strategy: "Role-weighted lexical retrieval, source diversity and adjacent context; each role <=20 windows / 48000 characters. Selected does not mean evaluated." },
       sources: [...sourceMap.values()],
       selectedUnits: [...unitMap.values()],
       hypotheses: structuredClone(hypotheses),
@@ -426,7 +430,7 @@ export class WorkspaceEngine {
               "Use only verified claims; no new factual claims or source access in this role.",
             currentDate: now(),
           };
-        let repair: string | null = null;
+        let repair: string | null = execution.error;
         for (;;) {
           run = await this.run(id);
           const budgetRuns = (await this.repo.load()).runs.filter(r => r.id === run.id || (run.budgetKey && r.budgetKey === run.budgetKey));
@@ -696,7 +700,7 @@ export class WorkspaceEngine {
                   ?.output?.assessments?.find(
                     (a) => a.claimId === candidate.id,
                   );
-                const relation =
+                let relation =
                   verified.classification === "insufficient_evidence" ||
                   verified.classification === "hypothesis"
                     ? "insufficient_evidence"
@@ -707,7 +711,7 @@ export class WorkspaceEngine {
                   return [u?.materialKey ?? c.sourceId, u?.unitId ?? c.paragraphId, c.quote.trim()];
                 }).sort((a,b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
                 const fingerprint = digest(JSON.stringify(evidenceKey(verified, run.selectedUnits)));
-                if (h.deltas.some(d => d.runId !== run.id && d.contractRevision === revision && d.evidenceFingerprint === fingerprint)) continue;
+                if (h.deltas.some(d => d.runId !== run.id && d.contractRevision === revision && d.evidenceFingerprint === fingerprint)) relation = "duplicate";
                 if (["supporting", "contradicting"].includes(relation)) ids.push(id);
                 const src = verified.candidate.citations[0];
                 h.deltas.push({

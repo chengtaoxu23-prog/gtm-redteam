@@ -35,7 +35,7 @@ export function ReplayRoom({
       <header className="room-top">
         <button type="button" className="brand brand-button" onClick={onExit}>
           <span className="brand-mark">S</span>
-          <span className="brand-word">SeminarRoom</span>
+          <span className="brand-word">GTM-RedTeam</span>
         </button>
         <div className="room-title">
           <span className="eyebrow replay-eyebrow">示例回放 · 非实时模型输出</span>

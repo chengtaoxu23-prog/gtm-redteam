@@ -702,3 +702,25 @@ test("restarting the same failed audit cannot obtain a fresh shared budget", asy
   const run=await f.engine.create(f.p.id,"plan",true); f.engine.launch(run.id);
   const stopped=await f.engine.wait(run.id); assert.equal(stopped.status,"paused"); assert.equal(stopped.calls.length,0); assert.equal(f.requests,16);
 });
+
+test("same evidence on a later run is duplicate and does not create another approval", async () => {
+  const f=await lockedSetup();
+  const first=await f.engine.create(f.p.id,"research",true); f.engine.launch(first.id); assert.equal((await f.engine.wait(first.id)).status,"completed");
+  const count=(await f.research.load()).hypotheses.reduce((n,h)=>n+h.proposals.length,0);
+  const second=await f.engine.create(f.p.id,"research",true); f.engine.launch(second.id); const done=await f.engine.wait(second.id);
+  assert.equal(done.status,"completed",done.error ?? "");
+  const s=await f.research.load(); assert.equal(s.hypotheses.reduce((n,h)=>n+h.proposals.length,0),count);
+  assert(s.hypotheses.flatMap(h=>h.deltas).filter(d=>d.runId===second.id).every(d=>d.relation==="duplicate"));
+  const {workspaceDeltas}=await import("../server/workspace-deltas.js");
+  assert(workspaceDeltas(done,s).every(d=>d.relation==="duplicate" && d.newEvidenceIds.length===0));
+});
+test("role weights prioritize relevant pricing versus customer evidence within bounded contexts", async () => {
+  const m=await ingestMaterial(Buffer.from(Array.from({length:60},(_,i)=> `North America market ${i}. `+(i===5 ? "customer interview willingness to pay purchase objection " : i===45 ? "pricing subscription tiers usage limits billing free trial " : "background ")+"text ".repeat(600)).join("\n\n")),"roles.txt");
+  const p={id:"role-test"} as ResearchProject;
+  const pricing=selectResearchSources(p,[m],"North America market",{role:"competitor"});
+  const customer=selectResearchSources(p,[m],"North America market",{role:"customer"});
+  assert(pricing.sources[0].rawContent.includes("pricing subscription"));
+  assert(customer.sources[0].rawContent.includes("customer interview"));
+  assert.notEqual(pricing.selectedUnits[0].unitId,customer.selectedUnits[0].unitId);
+  assert(pricing.sources.length<=20 && customer.sources.length<=20);
+});

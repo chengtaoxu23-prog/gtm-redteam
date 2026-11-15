@@ -153,8 +153,12 @@ const provider = createGtmHttpProvider(
         decisionThreshold: "unknown",
       }));
     if (system.includes("prefix 'verifier-'")) {
-      output.reviews = [];
-      output.assessments = [];
+      output.reviews = input.evidence.eligible.map((e: any) => ({claimId:e.claim.id,relation:"supported",directlyStated:true,reasoning:"Synthetic quote directly states the synthetic counterexample."}));
+      output.assessments = input.claimContracts.map((c: any) => ({claimId:c.claimId,hypothesisId:c.hypothesisId,direction:"contradicting",criteriaMet:false,reasoning:"Synthetic relevant counterexample; no real business conclusion."}));
+    }
+    if (input.kind === "research" && system.includes("prefix 'redteam-'")) {
+      const src=input.sourceSnapshots[0], paragraph=src.paragraphs[0];
+      output.claims=[{id:"redteam-ui-counterexample",hypothesisId:input.hypotheses[0].id,direction:"contradicting",text:paragraph.text,kind:"observation",reasoning:"ISOLATED synthetic counterexample used to exercise human review UI.",citations:[{sourceId:src.id,materialRevision:src.revision,paragraphId:paragraph.id,quote:paragraph.text.slice(0,200)}]}];
     }
     return new Response(
       JSON.stringify({

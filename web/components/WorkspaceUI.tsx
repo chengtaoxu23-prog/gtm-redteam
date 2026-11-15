@@ -24,7 +24,7 @@ export function WorkspaceNav({ session, onHome, onCreate, onOutput, output = fal
   session?: SeminarSession | null; onHome: () => void; onCreate?: () => void; onOutput?: (output: boolean) => void; output?: boolean;
 }) {
   return <aside className="research-nav" aria-label="工作空间导航">
-    <button className="brand brand-button" onClick={onHome}><span className="brand-symbol"><LineIcon name="team" /></span><span>SeminarRoom<small>RESEARCH WORKSPACE</small></span></button>
+    <button className="brand brand-button" onClick={onHome}><span className="brand-symbol"><LineIcon name="team" /></span><span>GTM-RedTeam<small>RESEARCH WORKSPACE</small></span></button>
     <div className="workspace-switch"><span className="workspace-square">研</span><div>我的研究空间<small>本地 · Alpha</small></div></div>
     {onCreate && <button className="new-research-button" onClick={onCreate}><LineIcon name="plus" />新建研讨<kbd>＋</kbd></button>}
     <div className="nav-section-label">工作空间</div>
