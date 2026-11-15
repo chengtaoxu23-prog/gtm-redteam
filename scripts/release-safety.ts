@@ -7,7 +7,7 @@ const patterns:[string,RegExp][]=[['credential',/sk-[A-Za-z0-9_-]{24,}|gh[pousr]
 const risks:{file:string;kind:string;line?:number;blob?:string}[]=[],images:string[]=[],allowlisted:string[]=[];
 function scan(file:string,text:string,blob?:string){for(const [index,line] of text.split(/\r?\n/).entries())for(const [kind,pattern] of patterns){if(!pattern.test(line))continue;const fixture=(file==='tests/gtm-bootstrap.test.ts'&&kind==='credential_assignment'&&line.includes('OPENAI_API_KEY')&&line.includes('synthetic-bootstrap-only'))||(file==='tests/gtm-runtime.test.ts'&&((kind==='credential_assignment'&&line.includes('const syntheticEnv=')&&line.includes('synthetic-test-only-secret'))||(kind==='email_address'&&line.includes('host.invalid')&&line.includes('assert.throws'))));if(fixture){allowlisted.push(file+':explicit-synthetic-fixture');continue;}if(file==='tests/gtm-engine.test.ts'&&line.includes("const canary=")&&line.includes('CANARY-synthetic-only')){allowlisted.push(file+':synthetic-canary');continue;}risks.push({file,kind,line:index+1,...(blob?{blob}:{})});}}
 for(const file of candidates){
- if(/^(?:\.env(?!\.example$)|data\/|work\/|outputs\/|node_modules\/|dist\/)|\.(?:log|bak|tmp|zip|patch)$/i.test(file)){risks.push({file,kind:'private_or_archive_in_release'});continue;}
+ if(file !== 'outputs/Public-data-Case-Report.md' && /^(?:\.env(?!\.example$)|data\/|work\/|outputs\/|node_modules\/|dist\/)|\.(?:log|bak|tmp|zip|patch)$/i.test(file)){risks.push({file,kind:'private_or_archive_in_release'});continue;}
  if(/\.(?:png|jpe?g|gif|webp)$/i.test(file)){images.push(file);continue;}
  const data=readFileSync(file);if(!data.includes(0))scan(file,data.toString('utf8'));
 }

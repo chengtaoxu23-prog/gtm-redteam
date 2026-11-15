@@ -2,6 +2,9 @@
 
 **A persistent evidence ledger for go-to-market decisions.**
 
+> **[查看真实 DeepSeek 双轮公开案例报告 →](outputs/Public-data-Case-Report.md)**
+> Public-data Case：15 次真实请求，保留失败与引用记录；不是客户验证。
+
 面向早期 AI/SaaS 团队的商业假设研究、持续证据追踪与决策工作空间。以锁定假设为单位，保留材料版本、实际读取片段、独立核验与人工决定。
 
 ## 真实解决的问题
@@ -106,7 +109,7 @@ npm run test:e2e:v04 -- --real-public-case
 npm run test:e2e:v04 -- --real-public-case --resume-project=PROJECT_UUID
 ```
 
-HTTP stub 测试不证明真实模型质量；工程验收不证明商业效果。GitHub 默认分支仍为 `codex/gtm-redteam-v0.2-ui`；本分支 README 不等于公共首页已更新，合并和默认分支调整须另行确认。
+HTTP stub 测试不证明真实模型质量；工程验收不证明商业效果。公开案例报告同时保留在 `examples/public-data-pilot/`，附可核查的调用和覆盖记录。
 
 ## Roadmap
 
