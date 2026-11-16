@@ -821,7 +821,10 @@ export default function GtmRealWorkspace() {
                       </small>
                     </section>
                     <section className="rw-card">
-                      <h2>待决定与证据缺口</h2>
+                      <h2>研究结果 · 下一步</h2>
+                      {run && <><h3>发现了什么</h3><p>{run.roles.find(r => r.role === "decision")?.output?.summary ?? "研究尚未完成，当前没有完整结论。"}</p>
+                      <h3>依据在哪里</h3><p>{run.verifiedClaims.length} 条经过引用与语义检查的声明；AI分析仍需人工确认。</p><button onClick={() => navigate("evidence")}>查看原文、引用与未读片段</button>
+                      <h3>下一步验证什么</h3></>}
                       {pending.length ? (
                         <p>
                           {pending.length} 条状态建议等待人工审查。

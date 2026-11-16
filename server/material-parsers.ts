@@ -350,6 +350,48 @@ export async function parseMaterial(
         for (const child of node.children ?? []) {
           if (child.type === "text") pending += child.data;
           else if (child.tagName === "br") pending += "\n";
+          else if (child.tagName === "table") {
+            flush();
+            const table = $(child), tableNumber = $("table").toArray().indexOf(child) + 1;
+            const rows = table.find("tr").toArray().filter(r => $(r).closest("table")[0] === child);
+            const grid: {text: string; header: boolean; origin: string}[][] = [];
+            rows.forEach((row, ri) => {
+              grid[ri] ??= [];
+              let ci = 0;
+              $(row).children("th,td").each((_j, cell) => {
+                while (grid[ri][ci]) ci++;
+                const colspan = Number($(cell).attr("colspan") ?? 1), rowspan = Number($(cell).attr("rowspan") ?? 1);
+                if (![colspan,rowspan].every(n => Number.isInteger(n) && n >= 1 && n <= 100) || ci + colspan > 200 || ri + rowspan > 2000) throw Error("html_table_span_limit");
+                const value = {text: $(cell).text().trim(), header: cell.tagName === "th", origin: `row ${ri+1} / column ${ci+1}`};
+                for (let dr=0; dr<rowspan; dr++) for (let dc=0; dc<colspan; dc++) {
+                  grid[ri+dr] ??= [];
+                  if (grid[ri+dr][ci+dc]) throw Error("html_table_overlapping_spans");
+                  grid[ri+dr][ci+dc] = value;
+                }
+                ci += colspan;
+              });
+            });
+            const headers: string[][] = [];
+            const emitted = new Set<string>();
+            grid.forEach((row, ri) => {
+              const headerRow = row.filter(Boolean).length > 0 && row.filter(Boolean).every(c => c.header);
+              row.forEach((cell, ci) => {
+                if (headerRow && cell.text) { headers[ci] ??= []; if (!headers[ci].includes(cell.text)) headers[ci].push(cell.text); }
+                if (emitted.has(cell.origin)) return;
+                emitted.add(cell.origin);
+                const label = headers[ci]?.join(" / ") || `unlabelled column ${ci+1}`;
+                const rowLabel = headerRow ? "column headings" : (row[0]?.text || `row ${ri+1}`);
+                const context = `Table ${tableNumber} | Column: ${label} | Row: ${rowLabel}`;
+                // Repeat coordinate context on every split; never separate a value from its plan header.
+                const chars = Array.from(cell.text);
+                for (let start=0; start<chars.length; start+=2200)
+                  add(context + "\n" + chars.slice(start,start+2200).join(""),
+                    `HTML table ${tableNumber} / ${cell.origin}` + (chars.length>2200 ? ` / chars ${start+1}-${Math.min(start+2200,chars.length)}` : ""));
+              });
+            });
+            const caption = table.children("caption").text().trim();
+            if (caption) add(caption, `HTML table ${tableNumber} / caption`);
+          }
           else if (blocks.has(child.tagName)) {
             flush();
             walk(child);

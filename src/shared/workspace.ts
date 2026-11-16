@@ -32,7 +32,7 @@ export interface Material {
   publicationBasis?: string;
   acquiredAt: string;
   bytes: number;
-  parserVersion: "material-v2";
+  parserVersion: "material-v2" | "material-v3-tables";
   units: MaterialUnit[];
   warnings: string[];
 }

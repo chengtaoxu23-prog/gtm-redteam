@@ -37,7 +37,7 @@ flowchart LR
 
 覆盖范围为 `(hypothesis_id, hypothesis_version, source_id, source_version, chunk_id)`，记录内容 Hash、Run、调用、时间和角色。完整片段发入请求且收到 Provider 响应后才记入覆盖；仅检索选中、Verifier 局部摘录和未确认送达的失败请求不计为完整片段已评估。进入上下文不表示结论正确。
 
-每个角色最多 20 个窗口／48,000 字符，原件完整保留。UI 与报告区分 `evaluated_chunks`、`unread_chunks_remaining`、`coverage_ratio` 和本轮新增读取。同版本 Delta 优先选择未覆盖 Chunk；契约或材料升版形成新范围。旧文件级标记不被冒充为片段覆盖。
+每个角色最多 20 个窗口／48,000 字符，原件完整保留。材料能完整放入预算时传入完整上下文；超预算时检索并优先补读未覆盖内容。HTML 表格单元格保留列标题、行名称及坐标，支持合并表头与跨行单元格；新解析版本不改写旧材料或历史覆盖。UI 与报告区分 `evaluated_chunks`、`unread_chunks_remaining`、`coverage_ratio` 和本轮新增读取。同版本 Delta 优先选择未覆盖 Chunk；契约或材料升版形成新范围。旧文件级标记不被冒充为片段覆盖。
 
 `not_found_in_read_chunks` 仅描述已读片段，未读内容仍可能含关键反证。
 

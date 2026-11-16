@@ -262,9 +262,10 @@ export async function ingestMaterial(
     );
   });
   const fileHash = digest(buffer);
+  const parserVersion = format === "html" ? "material-v3-tables" as const : "material-v2" as const;
   return {
     id: "src-" + digest(url ?? name).slice(0, 24),
-    revision: "sha256:" + digest(fileHash + ":material-v2"),
+    revision: "sha256:" + digest(fileHash + ":" + parserVersion),
     fileHash,
     name,
     title: parsed.title ?? name,
@@ -278,7 +279,7 @@ export async function ingestMaterial(
       : {}),
     acquiredAt: new Date().toISOString(),
     bytes: buffer.length,
-    parserVersion: "material-v2",
+    parserVersion,
     units: parsed.units,
     warnings: parsed.warnings,
   };

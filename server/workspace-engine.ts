@@ -77,10 +77,11 @@ export function selectResearchSources(
     selectedUnits: WorkspaceRun["selectedUnits"] = [],
     included = new Set<string>();
   let contextChars = 0;
-  for (const { m, u } of selected) {
+  const completeContextFits = materials.length <= 20 && all.reduce((n,e) => n + e.u.text.length,0) <= 48000;
+  const windows = completeContextFits ? materials.filter(m => m.units.length).map(m => ({m,u:m.units[0]})) : selected;
+  for (const { m, u } of windows) {
     const center = m.units.indexOf(u),
-      near = m.units
-        .slice(Math.max(0, center - 2), center + 3)
+      near = (completeContextFits ? m.units : m.units.slice(Math.max(0, center - 2), center + 3))
         .filter((v) => !included.has(materialKey(m) + v.id));
     if (
       sources.length >= 20 || !near.length ||

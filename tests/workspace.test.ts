@@ -724,3 +724,38 @@ test("role weights prioritize relevant pricing versus customer evidence within b
   assert.notEqual(pricing.selectedUnits[0].unitId,customer.selectedUnits[0].unitId);
   assert(pricing.sources.length<=20 && customer.sources.length<=20);
 });
+
+test("HTML pricing cells keep their own tier and limit scope through retrieval", async () => {
+ const raw=Buffer.from('<main><h1>Pricing</h1><table><thead><tr><th>Limit</th><th>Solo</th><th>Agency</th><th>Firehose</th></tr></thead><tbody><tr><th scope="row">Watches</th><td>1</td><td>5</td><td>No limit</td></tr><tr><th scope="row">Technologies per watch</th><td>1</td><td>2</td><td>50</td></tr></tbody></table><p>Cancel at period end.</p></main>');
+ const m=await ingestMaterial(raw,"pricing.html");
+ assert.equal(m.parserVersion,"material-v3-tables");
+ const unlimited=m.units.find(u=>u.text.includes("No limit"))!;
+ assert.match(unlimited.text,/Column: Firehose/); assert.match(unlimited.text,/Row: Watches/);
+ const filters=m.units.find(u=>u.text.includes("Row: Technologies per watch")&&u.text.endsWith("50"))!;
+ assert.match(filters.text,/Column: Firehose/); assert.match(filters.locator,/table 1.*row 3.*column 4/);
+ const selected=selectResearchSources({id:"table-test"} as ResearchProject,[m],"Firehose watches technologies pricing",{role:"competitor"});
+ assert(selected.sources.some(s=>s.rawContent.includes(filters.text)));
+ assert(m.units.some(u=>u.text==="Cancel at period end."));
+ const again=await ingestMaterial(raw,"pricing.html");assert.equal(again.revision,m.revision);assert.deepEqual(again.units,m.units);
+});
+test("merged HTML headings retain header hierarchy and rowspans without assigning another plan",async()=>{
+ const parsed=await parseMaterial(Buffer.from('<table><tr><th rowspan="2">Metric</th><th colspan="2">Business</th></tr><tr><th>Agency</th><th>Firehose</th></tr><tr><th>Sites</th><td>50000</td><td>Unlimited</td></tr></table>'),"html");
+ const cell=parsed.units.find(u=>u.text.endsWith("Unlimited"))!;
+ assert.match(cell.text,/Column: Business \/ Firehose/);assert.match(cell.text,/Row: Sites/);
+ assert(!cell.text.includes("Agency"));
+});
+test("long HTML values repeat coordinates on every chunk and new parser versions isolate old coverage",async()=>{
+ const raw=Buffer.from('<table><tr><th>Plan</th><th>Firehose</th></tr><tr><th>Notes</th><td>'+"x".repeat(7000)+'</td></tr></table>');
+ const m=await ingestMaterial(raw,"long.html");const pieces=m.units.filter(u=>u.locator.includes("row 2 / column 2"));
+ assert.equal(pieces.length,4);assert(pieces.every(u=>u.text.includes("Column: Firehose")&&u.text.includes("Row: Notes")));
+ const {digest}=await import("../server/research-materials.js");
+ assert.notEqual(m.revision,"sha256:"+digest(m.fileHash+":material-v2"));
+ await assert.rejects(()=>parseMaterial(Buffer.from('<table><tr><td colspan="999999">invalid</td></tr></table>'),"html"),/span_limit/);
+});
+
+test("short material sets enter complete context instead of unnecessarily dropping pricing tiers",async()=>{
+ const m=await ingestMaterial(Buffer.from(Array.from({length:90},(_,i)=>i===48?"Agency is for agencies doing outreach.":`Pricing context paragraph ${i}.`).join("\n\n")),"short-pricing.txt");
+ const selected=selectResearchSources({id:"complete"} as ResearchProject,[m],"Firehose pricing");
+ assert.equal(selected.coverage.selectedUnits,90);assert.equal(selected.coverage.omittedUnits,0);
+ assert(selected.sources[0].rawContent.includes("Agency is for agencies doing outreach."));
+});
